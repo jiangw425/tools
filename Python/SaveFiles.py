@@ -1,6 +1,7 @@
 from JunoswAna import *
 from os.path import exists
 from ROOT import TObject, TH1D, TH2D, TGraph
+import numpy as np
 
 def trans2tuple(indata):
     if not indata or isinstance(indata, tuple):
@@ -27,21 +28,21 @@ def write2root(outf, rtobj):
     else:
         print(f'Warning: unknown input type!')
 
-def getCachePath(fname):
-    def addtxt(s):
-        # print(s if s[-4:]=='.txt' else s+'.txt')
-        return s if s[-4:]=='.txt' else s+'.txt'
+def getCachePath(fname, tp=0):
+    types = ('.txt', '.npy')
+    def addtail(s):
+        return s if s[-4:]==types[tp] else s+types[tp]
 
     if fname[0] == '/' or fname[:2]=='./':
-        return addtxt(fname)
+        return addtail(fname)
     else:
-        cache_path = '/junofs/users/jiangw/include/cache'
+        cache_path = '/junofs/users/jiangw/tools/cache'
         specified_names = ( 'elecTruth', )
         for sn in specified_names:
             if sn in fname:
                 new_fname = fname.replace(sn, '')
-                return addtxt(f'{cache_path}/{sn}/{new_fname}')
-        return addtxt(f'{cache_path}/{fname}')
+                return addtail(f'{cache_path}/{sn}/{new_fname}')
+        return addtail(f'{cache_path}/{fname}')
 
 def fWriteNum(f, num, width=10):
     if isinstance(num, int):
@@ -86,6 +87,9 @@ def write2txt(val, oname, width=10):
     else:
         print(f'Warning: unknown input type!')
 
+def write2npy(val, oname):
+    np.save(getCachePath(oname, 1), val)
+
 def read4txt(iname):
     val = {}
     tags = []
@@ -109,6 +113,9 @@ def read4txt(iname):
         print(f'Warn! {inf} not exist!')
     return trans2tuple(val)
     # val: { tag0:data0, tag1:data1, ... }
+
+def read4npy(iname):
+    return np.load(getCachePath(iname, 1))
 
 def generateTH1Ds(args, setData=False):
     th1ds = {}
