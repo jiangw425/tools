@@ -1,67 +1,75 @@
 from math import sqrt
+from SaveFiles import read4npy, write2npy
 
-class Deconv():
+class Deconvolution():
     name = 'Deconvolution'
     tot_LPMT = 17612
+    n_pmt_types = 2
 
     def __init__(self, L):
         import os
+        import numpy as np
+        from ROOT import TFile, TVirtualFFT
+        import ctypes
         from tqdm import trange
-        from array import array
-        from ROOT import TFile
-        from ROOT.TVirtualFFT import FFT
-        self.L  = array('d', [L])
-        self.fft_forward = FFT(1, self.L, "R2C EX K")
-        self.fft_back    = FFT(1, self.L, "C2R EX K")
-        self.wf  = array('d',[0 for _ in range(L)])
-        self.wfre= array('d',[0 for _ in range(L)])
-        self.wfim= array('d',[0 for _ in range(L)])
+
+        ptr_L = ctypes.byref(ctypes.c_int(L))
+        print('Generating FFT plan: forward')
+        self.fft_forward = TVirtualFFT.FFT(1, ptr_L, "R2C EX K")
+        print('Done\nGenerating FFT plan: back')
+        self.fft_back    = TVirtualFFT.FFT(1, ptr_L, "C2R EX K")
+        print('Done')
+        self.wf   = np.zeros(L)
+        self.wfre = np.zeros(L)
+        self.wfim = np.zeros(L)
 
         envs = os.environ
         if 'JUNOTOP' in envs.keys():
             junotop=envs['JUNOTOP']
         else:
-            print(f'Warn: No JUNO env found, now to use J22.2.0-rc1')
-            junotop='/cvmfs/juno.ihep.ac.cn/centos7_amd64_gcc830/Pre-Release/J22.2.0-rc1'
+            print(f'Warn: No JUNO env found, now to use J22.2.0-rc2')
+            junotop='/cvmfs/juno.ihep.ac.cn/centos7_amd64_gcc830/Pre-Release/J22.2.0-rc2'
         junover=junotop.split('/')[-1]
 
         tag = 'filter'
         data_tag = f'{junover}_{self.name}_{tag}'
-        data = read4txt(data_tag)
-        if not data:
+        self.Filter = read4npy(data_tag)
+        if self.Filter.size == 0:
             print(f'Reading {data_tag}...')
             filterF = TFile(f'{junotop}/data/Reconstruction/Deconvolution/share/filter3_m.root')
-            tmp_filter = {}
-            for fname in ['fn0', 'fh0']:
+            tmp_filter = []
+            for i_type in range(self.n_pmt_types):
+                fname = 'fh0' if i_type else 'fn0'
                 filter1d = filterF.Get(fname)
-                pmttype = 'hmmt' if fname=='fh0' else 'nnvt'
-                tmp_filter[pmttype] = []
-                for i in range(filter1d.GetNbinsX()):
-                    tmp_filter[pmttype].append(filter1d.GetBinContent(i+1))
+                tmp_filter.append([])
+                for i in trange(filter1d.GetNbinsX()):
+                    tmp_filter[i_type].append(filter1d.GetBinContent(i+1))
             filterF.Close()
-            write2txt(tmp_filter, data_tag)
-            self.Filter = (array('d', tmp_filter['nnvt']), array('d', tmp_filter['hmmt']))
-        else:
-            self.Filter = (array('d',       data['nnvt']), array('d',       data['hmmt']))
-        self.N_filter = self.Filter[0].itemsize
+            self.Filter = np.array(tmp_filter)
+            write2npy(self.Filter, data_tag)
+        self.n_filter = self.Filter.shape[-1]
+        print(f'Read filter: {self.Filter.shape}')
 
         tag = 'SPEfreq'
         data_tag = f'{junover}_{self.name}_{tag}'
-        data = read4txt(data_tag)
-        if not data:
+        self.Freq = read4npy(data_tag)
+        if self.Freq.size == 0:
             print(f'Reading {data_tag}...')
             freqF = TFile(f'{junotop}/data/Reconstruction/Deconvolution/share/SPE_v20.root')
             freq_names = ('RE', 'IM')
-            tmp_freq = {}
-            for i in trange(self.tot_LPMT):
-                for j in freq_names:
-                    tmp1d = freqF.Get(f"PMTID_{i}_SPE{j}")
+            tmp_freq = []
+            for j in range(len(freq_names)):
+                tmp_freq.append([])
+                for i in trange(self.tot_LPMT):
+                    tmp_freq[j].append([])
+                    tmp1d = freqF.Get(f"PMTID_{i}_SPE{freq_names[j]}")
                     for n in range(tmp1d.GetNbinsX()):
-                        tmp_freq[j].append(tmp1d.GetBinContent(n+1))
+                        tmp_freq[j][i].append(tmp1d.GetBinContent(n+1))
             freqF.Close()
-            write2txt(tmp_freq, data_tag)
-            self.SPERE = array('d', tmp_freq['RE'])
-            self.SPEIM = array('d', tmp_freq['IM'])
+            self.Freq = np.array(tmp_freq)
+            write2npy(self.Freq, data_tag)
+        self.n_freq = self.Freq.shape[-1]
+        print(f'Read filter: {self.Freq.shape}')
 
 
 def subBSL_NTW(raw_wf, N=3, L_bsl=50):
@@ -109,5 +117,6 @@ def getNPE_AB(wf, amp_threshold, itg_threshold, SPEadcSum):
         T.append(0)
     return {'TTQ':sum(Q), 'FHT':T[0], 'Q':Q, 'T':T}
 
-                
-    
+if __name__ == "__main__":
+    a = Deconvolution(1000)                
+    print('test finished!')

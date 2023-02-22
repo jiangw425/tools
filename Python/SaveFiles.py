@@ -3,6 +3,7 @@ from os.path import exists
 from ROOT import TObject, TH1D, TH2D, TGraph
 import numpy as np
 
+# No speed up from list to tuple!
 def trans2tuple(indata):
     if not indata or isinstance(indata, tuple):
         return indata
@@ -115,7 +116,12 @@ def read4txt(iname):
     # val: { tag0:data0, tag1:data1, ... }
 
 def read4npy(iname):
-    return np.load(getCachePath(iname, 1))
+    inf = getCachePath(iname, 1)
+    if exists(inf):
+        return np.load(inf)
+    else:
+        print(f'Warn! {inf} not exist!')
+        return np.zeros(0)
 
 def generateTH1Ds(args, setData=False):
     th1ds = {}
